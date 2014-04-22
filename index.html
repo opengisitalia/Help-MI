@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<head>
+<title>HELP-MI</title>
+<link rel="shortcut icon" href="favicon.ico" />
+<meta charset="utf-8">
+<meta name="description" content="I servizi del Comune di Milano a portata di mano">
+<meta name="viewport" content="width=device-width, user-scrollbar=no, initial-scale=1.0, user-scalable=no">
+
+<link rel="stylesheet" href="css/app.css">
+<link rel="stylesheet" href="http://code.jquery.com/ui/1.10.3/themes/smoothness/jquery-ui.css" />
+<script src="https://maps.googleapis.com/maps/api/js?v=3.exp&sensor=true&libraries=places,visualization"></script>
+<script src="http://code.jquery.com/jquery-1.9.1.js"></script>
+<script src="http://code.jquery.com/ui/1.10.3/jquery-ui.js"></script>
+<script type="text/javascript" src="js/help-mi.js"></script>
+
+<script>
+var manifest_url = "http://www.opengisitalia.it/help-mi/app/manifest.json"; // per installare l'app
+var map;
+var markersArray = [];
+var gruppi = {
+'farmacie': 'sociale',
+'edicole': 'sociale',
+
+'associazioni_culturali': 'ass_culturali',
+'biblioteche': 'biblioteche',
+'cinema': 'cinema',
+'musei': 'musei',
+'teatri_auditorium': 'teatri',
+
+'bike_sharing': 'bike_sharing',
+'car_sharing': 'trasporti',
+'parcheggi_scambiatori': 'trasporti',
+'fermate_mm': 'trasporti',
+'fermate_tpl': 'trasporti',
+'stazioni_ferrovia': 'trasporti',
+
+'sportello_milano_semplice': 'amministrazione',
+'sedi_amministrative': 'amministrazione',
+
+'piscine': 'piscine',
+'impianti_sportivi': 'sport',
+
+'nidi': 'nidi',
+'scuole_infanzia': 'formazione',
+'scuole_primarie': 'formazione',
+'scuole_secondarie_1': 'formazione',
+'scuole_secondarie_2': 'formazione',
+'universita': 'formazione'
+}
+var ico_image = [];
+	ico_image['sociale'] = [];
+	ico_image['sociale']['yes'] = 'img/ICO_sociale.png'; 
+	ico_image['sociale']['no'] = 'img/ICO_sociale_bn.png';
+	ico_image['ass_culturali'] = [];
+	ico_image['ass_culturali']['yes'] = 'img/ICO_ass_culturali.png'; 
+	ico_image['ass_culturali']['no'] = 'img/ICO_ass_culturali_bn.png';
+	ico_image['biblioteche'] = [];
+	ico_image['biblioteche']['yes'] = 'img/ICO_biblioteche.png'; 
+	ico_image['biblioteche']['no'] = 'img/ICO_biblioteche_bn.png';
+	ico_image['teatri'] = [];
+	ico_image['teatri']['yes'] = 'img/ICO_teatri.png'; 
+	ico_image['teatri']['no'] = 'img/ICO_teatri_bn.png';
+	ico_image['musei'] = [];
+	ico_image['musei']['yes'] = 'img/ICO_musei.png'; 
+	ico_image['musei']['no'] = 'img/ICO_musei_bn.png';
+	ico_image['cinema'] = [];
+	ico_image['cinema']['yes'] = 'img/ICO_cinema.png'; 
+	ico_image['cinema']['no'] = 'img/ICO_cinema_bn.png';
+	ico_image['bike_sharing'] = [];
+	ico_image['bike_sharing']['yes'] = 'img/ICO_bike_sharing.png'; 
+	ico_image['bike_sharing']['no'] = 'img/ICO_bike_sharing_bn.png';
+	ico_image['trasporti'] = [];
+	ico_image['trasporti']['yes'] = 'img/ICO_trafficoTrasporti.png'; 
+	ico_image['trasporti']['no'] = 'img/ICO_trafficoTrasporti_bn.png';
+	ico_image['amministrazione'] = [];
+	ico_image['amministrazione']['yes'] = 'img/ICO_politica.png'; 
+	ico_image['amministrazione']['no'] = 'img/ICO_politica_bn.png';
+	ico_image['sport'] = [];
+	ico_image['sport']['yes'] = 'img/ICO_turismoTempoLibero.png'; 
+	ico_image['sport']['no'] = 'img/ICO_turismoTempoLibero_bn.png';
+	ico_image['piscine'] = [];
+	ico_image['piscine']['yes'] = 'img/ICO_piscine.png'; 
+	ico_image['piscine']['no'] = 'img/ICO_piscine_bn.png';
+	ico_image['formazione'] = [];
+	ico_image['formazione']['yes'] = 'img/ICO_formazione.png'; 
+	ico_image['formazione']['no'] = 'img/ICO_formazione_bn.png';
+	ico_image['nidi'] = [];
+	ico_image['nidi']['yes'] = 'img/ICO_nidi.png'; 
+	ico_image['nidi']['no'] = 'img/ICO_nidi_bn.png';		
+	ico_image['altro'] = [];
+	ico_image['altro']['yes'] = 'img/ICO_ente_milano.png'; 
+	ico_image['altro']['no'] = 'img/ICO_ente_milano_bn.png';
+	
+var selectedGruppo = [];
+var DistanzaImpostata = 200;
+var imageHere = 'img/markerHere.png';
+var posHere = new google.maps.LatLng(45.464217,9.190491);
+var geocoder;
+var markerHere = new google.maps.Marker({
+		position: posHere,
+		draggable:false,
+		map: null,
+		title: 'Io sono qui',
+		icon: imageHere
+	});
+google.maps.event.addListener(markerHere, 'click', function() { infowindow.open(map,markerHere); });
+
+//google.maps.event.addListener(markerHere, 'dragend', function() { markerHere.setDraggable(false); });
+
+var infowindow;
+var distance;
+var directionsDisplay;
+var directionsService = new google.maps.DirectionsService();
+var destination;
+var elenco_dest = [];
+
+var wait_for_distances = 0;
+var distances_ok = false;
+var travelmode;
+var destinazione_scelta = false;
+var servizio_cliccato = false;
+var markerCliccato = new google.maps.Marker({
+		position: posHere,
+		draggable:false,
+		map: null,
+		icon: 'img/markerCliccato.png',
+		ok: false
+	});
+
+var circleOptions = {
+	strokeColor: '#FF0000',
+	strokeOpacity: 0.8,
+	strokeWeight: 2,
+	fillColor: '#FF0000',
+	fillOpacity: 0.35,
+	map: null,
+	center: posHere,
+	radius: DistanzaImpostata
+};
+circle = new google.maps.Circle(circleOptions);
+	
+	
+	
+// funzione che elabora la risposta in formato JSON
+window.data_callback = function(results) {
+//alert('data_callback');
+//alert('data');
+  for (var i = 0; i < results.features.length; i++) {
+    var coords = results.features[i].geometry.coordinates;
+    var latLng = new google.maps.LatLng(coords[1], coords[0]);
+	elenco_dest.push(latLng); 
+	var content = results.features[i].properties.help_mi;
+	//alert(content);
+	var id = results.features[i].id;
+    var marker = new google.maps.Marker({
+      position: latLng,
+      map: null,
+	  content: content,
+	  title: results.features[i].properties.DENOMINAZ,
+	  distanza: 0,
+	  id: id,
+	  dettagli: results.features[i].properties
+    });
+	google.maps.event.addListener(marker, 'click', function() {
+																markerCliccato.setPosition(this.position);
+																markerCliccato.setMap(map);
+																markerCliccato.ok = true;
+																info(this);
+																mostra_dettagli();
+																});
+	markersArray.push(marker); // inserisce il marker nell'array
+	}
+	//alert('data loaded');
+	wait_for_distances += 1;
+	calcola_distanza();
+}
+
+
+$(function() {
+	// lo slider e' associato a un div, attenti all'id
+	$( "#slider" ).slider({
+	//range: "max",
+	min: 100,
+	max: 10000,
+	step: 50,
+	value: 200,
+	// funzione che aggiorna il valore dell'input all'attuale valore dello slider
+	slide: function( event, ui ) {
+		$( "#meter" ).val( formatta(ui.value));
+		distance = ui.value;
+	}
+	});
+	// passa all'input il valore iniziale dello slider
+	$( "#meter" ).val( $("#slider" ).slider( "value" ) + " m");
+	$( "#distanza_menu" ).val( $( "#slider" ).slider( "value" ) + " m");
+	distance =  $( "#slider" ).slider( "value" );
+	DistanzaImpostata = distance;
+});
+
+
+$(function() { $( ".info" ).draggable({ handle: "m" }); });
+
+
+  function install() {
+    //ev.preventDefault();
+    // define the manifest URL
+    var manifest_url = "http://www.opengisitalia.it/help-mi/app/manifest.webapp";
+    // install the app
+    var myapp = navigator.mozApps.install(manifest_url);
+    myapp.onsuccess = function(data) {
+      // App is installed, remove button
+      this.parentNode.removeChild(this);
+    };
+    myapp.onerror = function() {
+      // App wasn't installed, info is in this.error.name
+      console.log('Install failed, error: ' + this.error.name);
+     };
+ }
+
+
+
+google.maps.event.addDomListener(window, 'load', initialize);	  
+</script>
+
+</head>
+<body onload="inizio()">
+
+<div id="menu_log" class="menu" style="display:none;">
+
+</div>
+
+<div id="menu_standard" class="menu" style="display:block;">
+
+	<div style="float:right;">
+	<img src ="img/firefoxOS.png" width="28px" height="28px" style="margin: 1;" id="installa" onclick="install()" class="link">
+	</div>
+
+	<img src="img/separatore.png" width="2" height="100%" style="margin: 2;" />
+	<button id="cerca" width="150" height="100%" class="link" onclick="mostra_gruppi()">+ Servizi</button>
+	<img src="img/separatore.png" width="2" height="100%" style="margin: 2;" />
+	<img src="img/markerHere_n.png" class="link" onclick="mostra_posizione()" width="30px" height="30px"vstyle="margin: 1;" />
+	<img src="img/separatore.png" width="2" height="100%" style="margin: 1;" />
+	<img id="mode" src="img/car_b.png" height="100%" class="link" onclick="mostra_travelmode()" style="margin: 1;"/>
+	<img src="img/separatore.png" width="2" height="100%" style="margin: 2;"/>
+	<input type="button" id="distanza_menu" width="100px" height="100%" class="link" onclick="mostra_distanza()" style="margin: 1;"/>
+	<img src="img/separatore.png" width="2" height="100%" style="margin: 2;"/>
+	<div id="menu_dettagli" style="display:none;"><img src="img/info.png" width="30px" height="30px" class="link" onclick="mostra_dettagli()" style="margin: 1;" />
+	<img src="img/separatore.png" width="2" height="100%" style="margin: 2;"/></div>
+	<div id="menu_percorso" style="display:none;"><img src="img/frecce.png" width="30px" height="30px" style="margin: 0;" class="link" onclick="mostra_percorso()" style="margin: 1;" />
+	<img src="img/separatore.png" width="2" height="100%" style="margin: 2;"/></div>
+	<div style="display:inline;"><img src="img/clear.png" width="30px" height="30px" style="margin: 0;" class="link" onclick="pulisci()" style="margin: 1;" />
+	<img src="img/separatore.png" width="2" height="100%" style="margin: 2;"/></div>
+</div>
+
+<!-- mappa -->
+<div id="map-canvas"></div>
+
+<!-- gruppi -->
+<div id="gruppi" class="info" style="display:none;">
+	<div style="float:right;"><m><img src="img/move.png" width="20px" height="20px"></m></div>
+	<div id="sub">
+		<table width="100%">
+		<tr>
+			<td><img src="img/ICO_sociale.png" width="30" height="30"></td>
+			<td>Farmacie</td>
+			<td>
+			<input id="farmacie" onclick="AddToSelectedGruppo(this.id)" class="checkbox" type="checkbox" value="ON"></td>
+		</tr>	
+		<tr>
+			<td><img src="img/ICO_sociale.png" width="30" height="30"></td>
+			<td>Edicole</td>
+			<td>
+			<input id="edicole" onclick="AddToSelectedGruppo(this.id)" class="checkbox" type="checkbox" value="ON"></td>
+		</tr>
+		<tr>
+			<td><img src="img/ICO_ass_culturali.png" width="30" height="30"></td>
+			<td>Associazioni culturali </td>
+			<td>
+			<input id="associazioni_culturali" onclick="AddToSelectedGruppo(this.id)" class="checkbox" type="checkbox" value="ON"></td>
+		</tr>
+		<tr>
+			<td><img src="img/ICO_biblioteche.png" width="30" height="30"></td>
+			<td>Biblioteche</td>
+			<td>
+			<input id="biblioteche" onclick="AddToSelectedGruppo(this.id)" class="checkbox" type="checkbox" value="ON"></td>
+		</tr>
+		<tr>
+			<td><img src="img/ICO_cinema.png" width="30" height="30"></td>
+			<td>Cinema</td>
+			<td>
+			<input id="cinema" onclick="AddToSelectedGruppo(this.id)" class="checkbox" type="checkbox" value="ON"></td>
+		</tr>
+		<tr>
+			<td><img src="img/ICO_musei.png" width="30" height="30"></td>
+			<td>Musei</td>
+			<td>
+			<input id="musei" onclick="AddToSelectedGruppo(this.id)" class="checkbox" type="checkbox" value="ON"></td>
+		</tr>
+		<tr>
+			<td><img src="img/ICO_teatri.png" width="30" height="30"></td>
+			<td>Teatri e Auditorium</td>
+			<td>
+			<input id="teatri_auditorium" onclick="AddToSelectedGruppo(this.id)" class="checkbox" type="checkbox" value="ON"></td>
+		</tr>
+		<tr>
+			<td><img src="img/ICO_bike_sharing.png" width="30" height="30"></td>
+			<td>Stazioni Bike Sharing</td>
+			<td>
+			<input id="bike_sharing" onclick="AddToSelectedGruppo(this.id)" class="checkbox" type="checkbox" value="ON"></td>
+		</tr>
+		<tr>
+			<td><img src="img/ICO_trafficoTrasporti.png" width="30" height="30"></td>
+			<td>Stazioni Car Sharing</td>
+			<td>
+			<input id="car_sharing" onclick="AddToSelectedGruppo(this.id)" class="checkbox" type="checkbox" value="ON"></td>
+		</tr>
+		<tr>
+			<td><img src="img/ICO_trafficoTrasporti.png" width="30" height="30"></td>
+			<td>Parcheggi Scambiatori</td>
+			<td>
+			<input id="parcheggi_scambiatori" onclick="AddToSelectedGruppo(this.id)" class="checkbox" type="checkbox" value="ON"></td>
+		</tr>
+		<tr>
+			<td><img src="img/ICO_trafficoTrasporti.png" width="30" height="30"></td>
+			<td>Stazioni della metropolitana</td>
+			<td>
+			<input id="fermate_mm" onclick="AddToSelectedGruppo(this.id)" class="checkbox" type="checkbox" value="ON"></td>
+		</tr>
+		<tr>
+			<td><img src="img/ICO_trafficoTrasporti.png" width="30" height="30"></td>
+			<td>Fermate TPL di superficie</td>
+			<td>
+			<input id="fermate_tpl" onclick="AddToSelectedGruppo(this.id)" class="checkbox" type="checkbox" value="ON"></td>
+		</tr>
+		<tr>
+			<td><img src="img/ICO_trafficoTrasporti.png" width="30" height="30"></td>
+			<td>Stazioni ferroviarie</td>
+			<td>
+			<input id="stazioni_ferrovia" onclick="AddToSelectedGruppo(this.id)" class="checkbox" type="checkbox" value="ON"></td>
+		</tr>
+		<tr>
+			<td><img src="img/ICO_politica.png" width="30" height="30"></td>
+			<td>Sportelli Milano Semplice</td>
+			<td>
+			<input id="sportello_milano_semplice" onclick="AddToSelectedGruppo(this.id)" class="checkbox" type="checkbox" value="ON"></td>
+		</tr>
+		<tr>
+			<td><img src="img/ICO_politica.png" width="30" height="30"></td>
+			<td>Sedi amministrative</td>
+			<td>
+			<input id="sedi_amministrative" onclick="AddToSelectedGruppo(this.id)" class="checkbox" type="checkbox" value="ON"></td>
+		</tr>
+		<tr>
+			<td><img src="img/ICO_piscine.png" width="30" height="30"></td>
+			<td>Piscine</td>
+			<td>
+			<input id="piscine" onclick="AddToSelectedGruppo(this.id)" class="checkbox" type="checkbox" value="ON"></td>
+		</tr>
+		<tr>
+			<td><img src="img/ICO_turismoTempoLibero.png" width="30" height="30"></td>
+			<td>Impianti sportivi</td>
+			<td>
+			<input id="impianti_sportivi" onclick="AddToSelectedGruppo(this.id)" class="checkbox" type="checkbox" value="ON"></td>
+		</tr>
+		<tr>
+			<td><img src="img/ICO_nidi.png" width="30" height="30"></td>
+			<td>Nidi</td>
+			<td>
+			<input id="nidi" onclick="AddToSelectedGruppo(this.id)" class="checkbox" type="checkbox" value="ON"></td>
+		</tr>
+		<tr>
+			<td><img src="img/ICO_formazione.png" width="30" height="30"></td>
+			<td>Scuole di infanzia</td>
+			<td>
+			<input id="scuole_infanzia" onclick="AddToSelectedGruppo(this.id)" class="checkbox" type="checkbox" value="ON"></td>
+		</tr>
+		<tr>
+			<td><img src="img/ICO_formazione.png" width="30" height="30"></td>
+			<td>Scuole primarie</td>
+			<td>
+			<input id="scuole_primarie" onclick="AddToSelectedGruppo(this.id)" class="checkbox" type="checkbox" value="ON"></td>
+		</tr>
+		<tr>
+			<td><img src="img/ICO_formazione.png" width="30" height="30"></td>
+			<td>Scuole secondarie di I grado</td>
+			<td>
+			<input id="scuole_secondarie_1" onclick="AddToSelectedGruppo(this.id)" class="checkbox" type="checkbox" value="ON"></td>
+		</tr>
+		<tr>
+			<td><img src="img/ICO_formazione.png" width="30" height="30"></td>
+			<td>Scuole secondarie di II grado</td>
+			<td>
+			<input id="scuole_secondarie_2" onclick="AddToSelectedGruppo(this.id)" class="checkbox" type="checkbox" value="ON"></td>
+		</tr>
+		<tr>
+			<td><img src="img/ICO_formazione.png" width="30" height="30"></td>
+			<td>Sedi Universitarie</td>
+			<td>
+			<input id="universita" onclick="AddToSelectedGruppo(this.id)" class="checkbox" type="checkbox" value="ON"></td>
+		</tr>
+		<tr>
+			<td colspan="2">
+			<input id="altro" width="100%" type="textbox" placeholder="cerca..." size="20"></td>
+			<td><input onclick="cerca_altro()" width="100%" type="button" value=">"></td>
+		</tr>
+		</table>
+	</div>
+</div>
+
+<!-- posizione -->
+<div id="posizione" class="info" style="display:none;">
+	<div style="float:right;"><m><img src="img/move.png" width="20px" height="20px" onclick="aggiorna_posizione();nascondi_div();"></m></div>
+<table width="100%">
+	<tr>
+		<td>Rileva automaticamente</td>
+		<td><input onclick="individua_posizione()" type="button" value="A"></td>
+	</tr>
+	<tr>
+		<td>Muovi manualmente</td>
+		<td><input onclick="drag_marker()" type="button" value="D"></td>
+	</tr>
+	<tr>
+		<td><input id="address" type="textbox" placeholder="cerca..." size="20"></td> <!--   -->
+		<td><input onclick="codeAddress()" type="button" value=">>"></td>
+	</tr>
+</table>
+</div>
+
+<!-- travelmode -->
+<div id="travelmode" class="info" style="display:none;">
+	<div style="float:right;"><m><img src="img/move.png" width="20px" height="20px"></m></div>
+	<img src="img/car_n.png" onclick="change_mode(google.maps.DirectionsTravelMode.DRIVING);" width="54" height="26"/>
+	<img src="img/ped_n.png" onclick="change_mode(google.maps.DirectionsTravelMode.WALKING);" width="26" height="26"/>
+	<img src="img/bus_n.png" onclick="change_mode(google.maps.DirectionsTravelMode.TRANSIT);" width="50" height="26"/>
+</div>
+
+<!-- percorso -->
+<div id="percorso" class="info" style="display:none;">
+	<div style="float:right;"><m><img src="img/move.png" width="20px" height="20px"></m></div>
+</div>
+
+<!-- dettagli -->
+<div id="dettagli" class="info" style="display:none;">
+	<div style="float:right;"><m><img src="img/move.png" width="20px" height="20px"></m></div>
+</div>
+
+<!-- distanza -->	
+<div id="distanza" class="info" style="display:none;">
+	<div style="float:right;"><m><img src="img/move.png" width="20px" height="20px"></m></div>
+	<div id="barra">
+		<div id="ouput" align="center"><input type="text" id="meter" width="100%" style="border: 0; color: #f6931f; font-weight: bold;" size="20" /></div>
+		<div id="slider"></div>
+		<!-- <div align="center"><input type="button" width="100%" onclick="accetta()" value="ok"/></div> -->
+	</div>
+</div>
+<!-- info globale -->
+<div id="info" style="display:none;">
+</div>
+
+
+</body>  
+</html>
